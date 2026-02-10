@@ -1,6 +1,8 @@
 """Seat allocation engine - strict two-dept pairing, saturation, and overflow rules."""
 from collections import defaultdict
+from math import ceil
 
+# Historical default layout: 15 benches × 3 positions = 45 seats.
 TARGET_CAPACITY = 45
 
 
@@ -8,21 +10,25 @@ def allocate_seats(students_by_dept_subject, halls, capacity_per_bench=3, benche
     """
     Allocate students to halls with strict rules:
 
-    1. Saturation: Fill every room to exactly 45 before moving to next; no empty seats except last overflow.
+    1. Saturation: Fill each room up to its capacity (default 45) before moving to next;
+       no empty seats except last overflow.
     2. Two-Dept Pairing: Select exactly two departments per room; balance ratio (e.g. 23+22).
        Exhaustion: If second dept runs out, immediately add third dept to fill remaining seats.
     3. Anti-Single Department: Every room must have at least two distinct departments.
     4. Malpractice: No two same-subject students adjacent on same bench (A-B-A alternating pattern).
     5. Overflow: Combine all leftover students into final hall(s); anti-single-dept still applies.
 
+    Notes on flexibility:
+    - For traditional 45-capacity halls, we preserve the historic 15×3 bench layout.
+    - For halls with capacity != 45, we dynamically increase/decrease the number of benches
+      so that benches_per_hall is effectively ceil(capacity / students_per_bench), while
+      still respecting the same adjacency rules on each bench row.
+
     students_by_dept_subject: { (dept_id, subject_id): [Student, ...] }
     halls: [ExamHall, ...]
     Returns: list of (hall_id, bench, position, student_tuple)
     """
     STUDS_PER_BENCH = capacity_per_bench
-    BENCHES = benches_per_hall
-    SEATS_PER_HALL = BENCHES * STUDS_PER_BENCH
-    CAP = target_capacity if target_capacity is not None else TARGET_CAPACITY
 
     # Build mutable queues per (dept, subject) - we pop from these
     pools = {}
@@ -66,9 +72,9 @@ def allocate_seats(students_by_dept_subject, halls, capacity_per_bench=3, benche
                     return True
         return False
 
-    def find_valid_seat(hall_matrix, subj_id):
+    def find_valid_seat(hall_matrix, subj_id, benches_count):
         used = set(hall_matrix.keys())
-        for b in range(1, BENCHES + 1):
+        for b in range(1, benches_count + 1):
             for p in range(1, STUDS_PER_BENCH + 1):
                 if (b, p) not in used and not get_adjacent_same_subject(hall_matrix, subj_id, b, p):
                     return b, p
@@ -94,13 +100,24 @@ def allocate_seats(students_by_dept_subject, halls, capacity_per_bench=3, benche
     hall_matrix = {}
     dominant_pair_idx = 0
 
-    # Phase 1: Two-dept paired halls - fill each to exactly 45
+    # Phase 1: Two-dept paired halls - fill each towards its target capacity
     hall_idx = 0
     while hall_idx < len(halls_sorted) and count_remaining() > 0:
         hall = halls_sorted[hall_idx]
         hid = hall.id
-        capacity = min(SEATS_PER_HALL, getattr(hall, 'capacity', SEATS_PER_HALL))
-        target = min(capacity, CAP)
+        # Compute effective capacity and benches per hall.
+        hall_capacity = getattr(hall, "capacity", TARGET_CAPACITY) or TARGET_CAPACITY
+        # Historical behaviour: for 45-seat halls we keep exactly 15 benches.
+        if hall_capacity == TARGET_CAPACITY:
+            benches_for_hall = benches_per_hall
+        else:
+            benches_for_hall = max(1, ceil(hall_capacity / STUDS_PER_BENCH))
+        capacity = hall_capacity
+        # Optional global cap (kept for backward compatibility). In the new flow we normally
+        # call allocate_seats without a target_capacity so each hall can use its full capacity.
+        if target_capacity is not None:
+            capacity = min(capacity, target_capacity)
+        target = capacity
         hall_seats[hid] = []
         hall_matrix[hid] = {}
         hall_subject_dept = {}
@@ -143,7 +160,7 @@ def allocate_seats(students_by_dept_subject, halls, capacity_per_bench=3, benche
                 stu = pop_student(dept_id, subj_id)
                 if stu is None:
                     continue
-                seat = find_valid_seat(hall_matrix[hid], subj_id)
+                seat = find_valid_seat(hall_matrix[hid], subj_id, benches_for_hall)
                 if seat:
                     bench, pos = seat
                     allocations.append((hid, bench, pos, stu))
@@ -181,7 +198,14 @@ def allocate_seats(students_by_dept_subject, halls, capacity_per_bench=3, benche
     while hall_idx < len(halls_sorted) and count_remaining() > 0:
         hall = halls_sorted[hall_idx]
         hid = hall.id
-        capacity = min(SEATS_PER_HALL, getattr(hall, 'capacity', SEATS_PER_HALL))
+        hall_capacity = getattr(hall, "capacity", TARGET_CAPACITY) or TARGET_CAPACITY
+        if hall_capacity == TARGET_CAPACITY:
+            benches_for_hall = benches_per_hall
+        else:
+            benches_for_hall = max(1, ceil(hall_capacity / STUDS_PER_BENCH))
+        capacity = hall_capacity
+        if target_capacity is not None:
+            capacity = min(capacity, target_capacity)
         if hid not in hall_matrix:
             hall_matrix[hid] = {}
             hall_seats[hid] = []
@@ -204,7 +228,7 @@ def allocate_seats(students_by_dept_subject, halls, capacity_per_bench=3, benche
                 stu = pop_student(dept_id, subj_id)
                 if stu is None:
                     continue
-                seat = find_valid_seat(hall_matrix[hid], subj_id)
+                seat = find_valid_seat(hall_matrix[hid], subj_id, benches_for_hall)
                 if seat:
                     bench, pos = seat
                     allocations.append((hid, bench, pos, stu))
