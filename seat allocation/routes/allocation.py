@@ -104,10 +104,13 @@ def run_allocation(exam_id, exam_date_str):
         return None, 'No students found for the scheduled departments.'
 
     allocations, halls_sorted, hall_matrix, hall_seats = allocate_seats(
-        students_by_dept_subj, halls,
+        students_by_dept_subj,
+        halls,
         capacity_per_bench=Config.STUDENTS_PER_BENCH,
         benches_per_hall=Config.BENCHES_PER_HALL,
-        target_capacity=Config.DEFAULT_HALL_CAPACITY,
+        # Let each hall use its own configured capacity; 45-seat halls
+        # still behave exactly as before.
+        target_capacity=None,
     )
 
     exam = Exam.query.get(exam_id)
@@ -222,9 +225,14 @@ def view(exam_id, exam_date):
             seats_for_pdf = [(b, pos, roll) for b, row in seat_grid.items() for pos, roll in row.items() if roll]
             students = [{'roll_number': a.student.roll_number, 'name': a.student.name} for a in hall_alloc if a.student]
             hall_info.append({
-                'hall_number': h.hall_number, 'building_name': h.building_name or '',
-                'floor': h.floor or '', 'allocations': alloc_list,
-                'seat_rows': seat_rows, 'seats': seats_for_pdf, 'students': students
+                'hall_number': h.hall_number,
+                'capacity': h.capacity,
+                'building_name': h.building_name or '',
+                'floor': h.floor or '',
+                'allocations': alloc_list,
+                'seat_rows': seat_rows,
+                'seats': seats_for_pdf,
+                'students': students,
             })
     return render_template('allocation/view.html', exam=exam, exam_date=exam_date, hall_info=hall_info)
 
@@ -269,9 +277,13 @@ def generate(exam_id, exam_date):
             seats = [(a.bench_number, a.position, a.student.roll_number if a.student else '') for a in hall_alloc]
             students = [{'roll_number': a.student.roll_number, 'name': a.student.name} for a in hall_alloc if a.student]
             hall_info.append({
-                'hall_number': h.hall_number, 'building_name': h.building_name or '',
-                'floor': h.floor or '', 'allocations': alloc_list,
-                'seats': seats, 'students': students
+                'hall_number': h.hall_number,
+                'capacity': h.capacity,
+                'building_name': h.building_name or '',
+                'floor': h.floor or '',
+                'allocations': alloc_list,
+                'seats': seats,
+                'students': students,
             })
 
     from zipfile import ZipFile
