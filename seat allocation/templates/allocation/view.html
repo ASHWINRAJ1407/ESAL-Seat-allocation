@@ -14,7 +14,8 @@
         <span><i class="bi bi-door-open me-2"></i>Hall {{ hall.hall_number }} | {{ hall.building_name }} | Floor: {{ hall.floor }}</span>
     </div>
     <div class="card-body">
-        <h6 class="text-muted mb-3">Department-wise summary</h6>
+        <h6 class="text-muted mb-1">Department-wise summary</h6>
+        <p class="small text-muted mb-3">Hall capacity: {{ hall.capacity or 45 }} seats</p>
         <table class="table table-sm mb-4">
             <thead><tr><th>Department</th><th>Subject</th><th>Count</th><th>Roll Range</th></tr></thead>
             <tbody>
@@ -28,27 +29,53 @@
                 {% endfor %}
             </tbody>
         </table>
-        <h6 class="text-muted mb-3">Seating arrangement (Bench | Position 1 | 2 | 3)</h6>
-        <div class="table-responsive">
-            <table class="table table-bordered table-sm" style="font-size: 0.9rem;">
-                <thead class="table-light">
-                    <tr><th>Bench</th><th>Position 1</th><th>Position 2</th><th>Position 3</th></tr>
-                </thead>
-                <tbody>
-                    {% for bench, p1, p2, p3 in hall.seat_rows %}
-                    <tr>
-                        <td><strong>{{ bench }}</strong></td>
-                        <td>{{ p1 }}</td>
-                        <td>{{ p2 }}</td>
-                        <td>{{ p3 }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="4" class="text-muted">No seats allocated</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <p class="small text-muted mt-2">Students from the same department/subject are seated non-adjacent where possible.</p>
+        {% if (hall.capacity or 45) == 45 %}
+            <h6 class="text-muted mb-3">Seating arrangement (Bench | Position 1 | 2 | 3)</h6>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm" style="font-size: 0.9rem;">
+                    <thead class="table-light">
+                        <tr><th>Bench</th><th>Position 1</th><th>Position 2</th><th>Position 3</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for bench, p1, p2, p3 in hall.seat_rows %}
+                        <tr>
+                            <td><strong>{{ bench }}</strong></td>
+                            <td>{{ p1 }}</td>
+                            <td>{{ p2 }}</td>
+                            <td>{{ p3 }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-muted">No seats allocated</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <h6 class="text-muted mb-3">Seating arrangement (Seat No → Roll Number)</h6>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm" style="font-size: 0.9rem;">
+                    <thead class="table-light">
+                        <tr><th style="width: 120px;">Seat No</th><th>Roll Number</th></tr>
+                    </thead>
+                    <tbody>
+                        {% set seats_sorted = hall.seats | sort(attribute=0) %}
+                        {% set per_bench = 3 %}
+                        {% for bench, pos, roll in seats_sorted %}
+                        {% set seat_no = (bench - 1) * per_bench + pos %}
+                        {% if seat_no <= (hall.capacity or 45) %}
+                        <tr>
+                            <td><strong>{{ seat_no }}</strong></td>
+                            <td>{{ roll }}</td>
+                        </tr>
+                        {% endif %}
+                        {% else %}
+                        <tr><td colspan="2" class="text-muted">No seats allocated</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+        <p class="small text-muted mt-2">Students from the same department/subject are seated non-adjacent on the same bench where possible.</p>
     </div>
 </div>
 {% endfor %}
