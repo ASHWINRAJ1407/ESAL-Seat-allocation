@@ -106,7 +106,12 @@ def create_overall_allocation_pdf(allocations_by_hall, exam_name, exam_date):
 
 
 def create_classroom_allocation_pdf(hall_info, exam_name, exam_date):
-    """Single classroom seating allocation - compact layout, students NOT adjacent by department."""
+    """Single classroom seating allocation.
+
+    - For traditional 45-capacity halls, we keep the compact Bench/Pos1/Pos2/Pos3 layout.
+    - For other capacities, we generate a Seat No → Roll Number list (seat numbers derived
+      from bench/position and trimmed to the configured hall capacity).
+    """
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.4*inch, bottomMargin=0.4*inch)
     styles = getSampleStyleSheet()
@@ -125,30 +130,56 @@ def create_classroom_allocation_pdf(hall_info, exam_name, exam_date):
         doc.build(story)
         buffer.seek(0)
         return buffer
+    capacity = hall_info.get("capacity") or 45
 
-    data = [['Bench', 'Pos 1', 'Pos 2', 'Pos 3']]
-    seat_map = {}
-    for bench, pos, roll in seats:
-        if bench not in seat_map:
-            seat_map[bench] = {1: '', 2: '', 3: ''}
-        seat_map[bench][pos] = str(roll)
+    if capacity == 45:
+        # Preserve existing Bench/Position table for 45-seat halls.
+        data = [['Bench', 'Pos 1', 'Pos 2', 'Pos 3']]
+        seat_map = {}
+        for bench, pos, roll in seats:
+            if bench not in seat_map:
+                seat_map[bench] = {1: '', 2: '', 3: ''}
+            seat_map[bench][pos] = str(roll)
 
-    for b in sorted(seat_map.keys()):
-        row = seat_map[b]
-        data.append([str(b), row.get(1, ''), row.get(2, ''), row.get(3, '')])
+        for b in sorted(seat_map.keys()):
+            row = seat_map[b]
+            data.append([str(b), row.get(1, ''), row.get(2, ''), row.get(3, '')])
 
-    t = Table(data, colWidths=[0.6*inch, 1.4*inch, 1.4*inch, 1.4*inch])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2980b9')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-    ]))
-    story.append(t)
+        t = Table(data, colWidths=[0.6*inch, 1.4*inch, 1.4*inch, 1.4*inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2980b9')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(t)
+    else:
+        # Seat-number list for non-45 halls.
+        seats_sorted = sorted(seats, key=lambda x: (x[0], x[1]))
+        per_bench = 3
+        rows = [["Seat No", "Roll Number"]]
+        for bench, pos, roll in seats_sorted:
+            seat_no = (bench - 1) * per_bench + pos
+            if seat_no > capacity:
+                continue
+            rows.append([str(seat_no), str(roll)])
+
+        t = Table(rows, colWidths=[0.9 * inch, 2.6 * inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2980b9')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(t)
     doc.build(story)
     buffer.seek(0)
     return buffer
